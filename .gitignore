@@ -1,0 +1,6 @@
+env310/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
