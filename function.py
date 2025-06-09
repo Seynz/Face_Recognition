@@ -5,7 +5,7 @@ from numpy import dot
 from numpy.linalg import norm
 import json
 from pymilvus import Collection, connections
-import time
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 class FaceRecognizer:
     def __init__(self):
@@ -113,28 +113,32 @@ class Menu:
                         result = results[0][0]
                         matched_id = result.entity.get("id")
                         similarity = result.distance
+                        # print("matched_id:", matched_id)
+                        # print("label_name:", label_name)
+                        # print("similarity:", similarity)
 
                         label_name = id_to_label.get(str(int(matched_id)), "Unknown")
 
-                        if similarity > 0.5 and label_name in self.daftar_kelas:
+                        # if similarity > 0.5 and label_name in self.daftar_kelas:
+                        if similarity > 0.5:
                             label = f"{label_name} ({similarity:.2f})"
                             color = (0, 255, 0)
-                            if label_name not in self.absen:
-                                self.absen[label_name] = 'Hadir'
-                                print(f"{label_name} dinyatakan hadir")
-                                print("Isi absen:", self.absen)
-                            else:
-                                if i == 0:
-                                    print(f"{label_name} sudah hadir")
-                                    print("Isi absen:", self.absen)
-                                    i += 1
-                        elif similarity > 0.5:
-                            label = f"{label_name} ({similarity:.2f})"
-                            color = (0, 255, 0)
-                            #tambahkan time sleep sebelum print
-                            time.sleep(5)
-                            print(f"{label_name} tidak terdaftar di kelas!!!")
-                            break
+                            # if label_name not in self.absen:
+                            #     self.absen[label_name] = 'Hadir'
+                            #     print(f"{label_name} dinyatakan hadir")
+                            #     print("Isi absen:", self.absen)
+                            # else:
+                            #     if i == 0:
+                            #         print(f"{label_name} sudah hadir")
+                            #         print("Isi absen:", self.absen)
+                            #         i += 1
+                        # elif similarity > 0.5:
+                        #     label = f"{label_name} ({similarity:.2f})"
+                        #     color = (0, 255, 0)
+                        #     #tambahkan time sleep sebelum print
+                        #     time.sleep(5)
+                        #     print(f"{label_name} tidak terdaftar di kelas!!!")
+                        #     break
                         else:
                             label = "Unknown"
                             color = (0, 0, 255)
@@ -160,10 +164,56 @@ class Menu:
         cap.release()
         cv2.destroyAllWindows()
 
+    # def tambah_wajah(self):
+    #     self.collection.load()
+    #     cap = cv2.VideoCapture(0)
+    #     print("Tekan 's' untuk simpan wajah, 'q' untuk keluar.")
+
+    #     while True:
+    #         ret, frame = cap.read()
+    #         if not ret:
+    #             print("Gagal membuka kamera.")
+    #             break
+
+    #         faces = self.app.get(frame)
+
+    #         for face in faces:
+    #             bbox = face['bbox'].astype(int)
+    #             x1, y1, x2, y2 = bbox
+    #             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
+
+    #         cv2.imshow("Tambah Wajah Baru", frame)
+    #         key = cv2.waitKey(1) & 0xFF
+
+    #         if key == ord('s') and faces:
+    #             embedding = faces[0]['embedding']
+    #             norm_emb = embedding / np.linalg.norm(embedding)
+
+    #             # Insert embedding saja, tanpa ID
+    #             mr = self.collection.insert([[norm_emb.tolist()]])
+    #             new_id = mr.primary_keys[0]
+
+    #             nama = input("Masukkan nama orang ini: ")
+
+    #             self.id_to_label[str(new_id)] = nama
+    #             with open(self.path_label, "w") as f:
+    #                 json.dump(self.id_to_label, f)
+
+    #             print(f"Wajah '{nama}' berhasil ditambahkan dengan ID {new_id}.")
+    #             break
+    #         elif key == ord('q'):
+    #             break
+
+    #     cap.release()
+    #     cv2.destroyAllWindows()
     def tambah_wajah(self):
         self.collection.load()
         cap = cv2.VideoCapture(0)
-        print("Tekan 's' untuk simpan wajah, 'q' untuk keluar.")
+        print("Tekan 's' untuk mulai menangkap wajah (3x), 'q' untuk keluar.")
+
+        embeddings = []
+        max_shots = 3
+        shots_taken = 0
 
         while True:
             ret, frame = cap.read()
@@ -172,34 +222,45 @@ class Menu:
                 break
 
             faces = self.app.get(frame)
-
             for face in faces:
-                bbox = face['bbox'].astype(int)
-                x1, y1, x2, y2 = bbox
+                x1, y1, x2, y2 = face['bbox'].astype(int)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
+
+            cv2.putText(frame, f"Wajah ke-{shots_taken + 1}/{max_shots}", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
 
             cv2.imshow("Tambah Wajah Baru", frame)
             key = cv2.waitKey(1) & 0xFF
 
             if key == ord('s') and faces:
-                embedding = faces[0]['embedding']
-                norm_emb = embedding / np.linalg.norm(embedding)
+                face = faces[0]
+                emb = face['embedding']
+                norm_emb = emb / np.linalg.norm(emb)
+                embeddings.append(norm_emb.tolist())
+                shots_taken += 1
+                print(f"Wajah ke-{shots_taken} berhasil diambil.")
 
-                # Insert embedding saja, tanpa ID
-                mr = self.collection.insert([[norm_emb.tolist()]])
-                new_id = mr.primary_keys[0]
+                if shots_taken >= max_shots:
+                    # Simpan ke Milvus
+                    mr = self.collection.insert([embeddings])
+                    new_ids = mr.primary_keys
 
-                nama = input("Masukkan nama orang ini: ")
+                    nama = input("Masukkan nama orang ini: ")
+                    for new_id in new_ids:
+                        self.id_to_label[str(new_id)] = nama
 
-                self.id_to_label[str(new_id)] = nama
-                with open(self.path_label, "w") as f:
-                    json.dump(self.id_to_label, f)
+                    with open(self.path_label, "w") as f:
+                        json.dump(self.id_to_label, f)
 
-                print(f"Wajah '{nama}' berhasil ditambahkan dengan ID {new_id}.")
-                break
+                    print(f"Wajah '{nama}' berhasil ditambahkan dengan {len(new_ids)} embedding.")
+                    break
+
             elif key == ord('q'):
                 break
 
         cap.release()
         cv2.destroyAllWindows()
+
+
+
 
