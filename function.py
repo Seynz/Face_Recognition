@@ -5,7 +5,6 @@ from numpy import dot
 from numpy.linalg import norm
 import json
 from pymilvus import Collection, connections
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 class FaceRecognizer:
     def __init__(self):
@@ -70,8 +69,8 @@ class Menu:
 
     def deteksi_wajah(self):
         # Setup koneksi ke Milvus
-        collection = Collection(self.nama_koleksi)
-        collection.load()
+        # collection = Collection(self.nama_koleksi)
+        # collection.load()
 
         # Load mapping ID ke nama
         try:
@@ -87,7 +86,7 @@ class Menu:
         # Buka webcam
         cap = cv2.VideoCapture(0)
 
-        i =0
+        # i =0
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -101,7 +100,7 @@ class Menu:
                 norm_emb = embedding / np.linalg.norm(embedding)
 
                 try:
-                    results = collection.search(
+                    results = self.collection.search(
                         data=[norm_emb.tolist()],
                         anns_field="embedding",
                         param={"metric_type": "IP", "params": {"nprobe": 10}},
@@ -164,56 +163,9 @@ class Menu:
         cap.release()
         cv2.destroyAllWindows()
 
-    # def tambah_wajah(self):
-    #     self.collection.load()
-    #     cap = cv2.VideoCapture(0)
-    #     print("Tekan 's' untuk simpan wajah, 'q' untuk keluar.")
-
-    #     while True:
-    #         ret, frame = cap.read()
-    #         if not ret:
-    #             print("Gagal membuka kamera.")
-    #             break
-
-    #         faces = self.app.get(frame)
-
-    #         for face in faces:
-    #             bbox = face['bbox'].astype(int)
-    #             x1, y1, x2, y2 = bbox
-    #             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
-
-    #         cv2.imshow("Tambah Wajah Baru", frame)
-    #         key = cv2.waitKey(1) & 0xFF
-
-    #         if key == ord('s') and faces:
-    #             embedding = faces[0]['embedding']
-    #             norm_emb = embedding / np.linalg.norm(embedding)
-
-    #             # Insert embedding saja, tanpa ID
-    #             mr = self.collection.insert([[norm_emb.tolist()]])
-    #             new_id = mr.primary_keys[0]
-
-    #             nama = input("Masukkan nama orang ini: ")
-
-    #             self.id_to_label[str(new_id)] = nama
-    #             with open(self.path_label, "w") as f:
-    #                 json.dump(self.id_to_label, f)
-
-    #             print(f"Wajah '{nama}' berhasil ditambahkan dengan ID {new_id}.")
-    #             break
-    #         elif key == ord('q'):
-    #             break
-
-    #     cap.release()
-    #     cv2.destroyAllWindows()
     def tambah_wajah(self):
-        self.collection.load()
         cap = cv2.VideoCapture(0)
-        print("Tekan 's' untuk mulai menangkap wajah (3x), 'q' untuk keluar.")
-
-        embeddings = []
-        max_shots = 3
-        shots_taken = 0
+        print("Tekan 's' untuk simpan wajah, 'q' untuk keluar.")
 
         while True:
             ret, frame = cap.read()
@@ -222,44 +174,91 @@ class Menu:
                 break
 
             faces = self.app.get(frame)
-            for face in faces:
-                x1, y1, x2, y2 = face['bbox'].astype(int)
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
 
-            cv2.putText(frame, f"Wajah ke-{shots_taken + 1}/{max_shots}", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+            for face in faces:
+                bbox = face['bbox'].astype(int)
+                x1, y1, x2, y2 = bbox
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
 
             cv2.imshow("Tambah Wajah Baru", frame)
             key = cv2.waitKey(1) & 0xFF
 
             if key == ord('s') and faces:
-                face = faces[0]
-                emb = face['embedding']
-                norm_emb = emb / np.linalg.norm(emb)
-                embeddings.append(norm_emb.tolist())
-                shots_taken += 1
-                print(f"Wajah ke-{shots_taken} berhasil diambil.")
+                embedding = faces[0]['embedding']
+                norm_emb = embedding / np.linalg.norm(embedding)
 
-                if shots_taken >= max_shots:
-                    # Simpan ke Milvus
-                    mr = self.collection.insert([embeddings])
-                    new_ids = mr.primary_keys
+                # Insert embedding saja, tanpa ID
+                mr = self.collection.insert([[norm_emb.tolist()]])
+                new_id = mr.primary_keys[0]
 
-                    nama = input("Masukkan nama orang ini: ")
-                    for new_id in new_ids:
-                        self.id_to_label[str(new_id)] = nama
+                nama = input("Masukkan nama orang ini: ")
 
-                    with open(self.path_label, "w") as f:
-                        json.dump(self.id_to_label, f)
+                self.id_to_label[str(new_id)] = nama
+                with open(self.path_label, "w") as f:
+                    json.dump(self.id_to_label, f)
 
-                    print(f"Wajah '{nama}' berhasil ditambahkan dengan {len(new_ids)} embedding.")
-                    break
-
+                print(f"Wajah '{nama}' berhasil ditambahkan dengan ID {new_id}.")
+                break
             elif key == ord('q'):
                 break
 
         cap.release()
         cv2.destroyAllWindows()
+
+    # def tambah_wajah(self):
+    #     self.collection.load()
+    #     cap = cv2.VideoCapture(0)
+    #     print("Tekan 's' untuk mulai menangkap wajah (3x), 'q' untuk keluar.")
+
+    #     embeddings = []
+    #     max_shots = 3
+    #     shots_taken = 0
+
+    #     while True:
+    #         ret, frame = cap.read()
+    #         if not ret:
+    #             print("Gagal membuka kamera.")
+    #             break
+
+    #         faces = self.app.get(frame)
+    #         for face in faces:
+    #             x1, y1, x2, y2 = face['bbox'].astype(int)
+    #             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
+
+    #         cv2.putText(frame, f"Wajah ke-{shots_taken + 1}/{max_shots}", (10, 30),
+    #                     cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+
+    #         cv2.imshow("Tambah Wajah Baru", frame)
+    #         key = cv2.waitKey(1) & 0xFF
+
+    #         if key == ord('s') and faces:
+    #             face = faces[0]
+    #             emb = face['embedding']
+    #             norm_emb = emb / np.linalg.norm(emb)
+    #             embeddings.append(norm_emb.tolist())
+    #             shots_taken += 1
+    #             print(f"Wajah ke-{shots_taken} berhasil diambil.")
+
+    #             if shots_taken >= max_shots:
+    #                 # Simpan ke Milvus
+    #                 mr = self.collection.insert([embeddings])
+    #                 new_ids = mr.primary_keys
+
+    #                 nama = input("Masukkan nama orang ini: ")
+    #                 for new_id in new_ids:
+    #                     self.id_to_label[str(new_id)] = nama
+
+    #                 with open(self.path_label, "w") as f:
+    #                     json.dump(self.id_to_label, f)
+
+    #                 print(f"Wajah '{nama}' berhasil ditambahkan dengan {len(new_ids)} embedding.")
+    #                 break
+
+    #         elif key == ord('q'):
+    #             break
+
+    #     cap.release()
+    #     cv2.destroyAllWindows()
 
 
 
